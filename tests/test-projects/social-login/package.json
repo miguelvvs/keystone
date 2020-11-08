@@ -24,6 +24,7 @@
     "@keystonejs/auth-passport": "^5.2.11",
     "@keystonejs/auth-password": "^5.1.17",
     "@keystonejs/fields": "^20.0.0",
+    "@keystonejs/fields-cloudinary-image": "^2.0.2",
     "@keystonejs/file-adapters": "^7.0.8",
     "@keystonejs/keystone": "^17.1.1",
     "@keystonejs/server-side-graphql-client": "^1.1.2",
