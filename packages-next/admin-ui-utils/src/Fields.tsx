@@ -43,10 +43,7 @@ export function Fields({
           onChange={
             fieldMode === 'edit'
               ? fieldValue => {
-                  onChange({
-                    ...value,
-                    [fieldPath]: { kind: 'value', value: fieldValue },
-                  });
+                  onChange({ ...value, [fieldPath]: { kind: 'value', value: fieldValue } });
                 }
               : undefined
           }

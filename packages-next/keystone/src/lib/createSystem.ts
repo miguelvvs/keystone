@@ -1,4 +1,3 @@
-import type { IncomingMessage, ServerResponse } from 'http';
 import { GraphQLSchema, GraphQLObjectType, execute, parse } from 'graphql';
 import { mergeSchemas } from '@graphql-tools/merge';
 import { mapSchema } from '@graphql-tools/utils';
@@ -16,10 +15,42 @@ import type {
 } from '@keystone-next/types';
 import { adminMetaSchemaExtension } from '@keystone-next/admin-ui/templates';
 import { autoIncrement, mongoId } from '@keystone-next/fields';
-import { implementSession } from '../session';
 import { gql } from '../schema';
 import { itemAPIForList } from './itemAPI';
 import { accessControlContext, skipAccessControlContext } from './createAccessControlContext';
+
+/* Validate lists config and default the id field */
+function applyIdFieldDefaults(config: KeystoneConfig): KeystoneConfig['lists'] {
+  const { lists, db } = config;
+  const newLists: KeystoneConfig['lists'] = {};
+  Object.keys(lists).forEach(key => {
+    const listConfig = lists[key];
+    if (listConfig.fields.id) {
+      throw new Error(
+        `A field with the \`id\` path is defined in the fields object on the ${JSON.stringify(
+          key
+        )} list. This is not allowed, use the idField option instead.`
+      );
+    }
+    let idField =
+      listConfig.idField ?? { mongoose: mongoId({}), knex: autoIncrement({}) }[db.adapter];
+    idField = {
+      ...idField,
+      config: {
+        ui: {
+          createView: { fieldMode: 'hidden', ...idField.config.ui?.createView },
+          itemView: { fieldMode: 'hidden', ...idField.config.ui?.itemView },
+          ...idField.config.ui,
+        },
+        ...idField.config,
+      },
+    };
+
+    const fields = { id: idField, ...listConfig.fields };
+    newLists[key] = { ...listConfig, fields };
+  });
+  return newLists;
+}
 
 export function createKeystone(config: KeystoneConfig): any {
   // Note: For backwards compatibility we may want to expose
@@ -156,41 +187,39 @@ function createAdminMeta(
   return { adminMeta, views };
 }
 
-function createGraphQLSchema(
+export function createGraphQLSchema(
   config: KeystoneConfig,
   keystone: any,
-  adminMeta: any,
-  sessionStrategy?: SessionStrategy<unknown>,
-  sessionImplementation?: any
-) {
+  sessionStrategy: any,
+  adminMeta: any
+): any {
+  const { lists, extendGraphqlSchema, ui } = config;
   // @ts-ignore
-  const server = keystone.createApolloServer({
-    schemaName: 'public',
-    dev: process.env.NODE_ENV === 'development',
-  });
-  const schemaFromApolloServer: GraphQLSchema = server.schema;
-  const schema = mapSchema(schemaFromApolloServer, {
-    'MapperKind.OBJECT_TYPE'(type) {
-      if (
-        config.lists[type.name] !== undefined &&
-        config.lists[type.name].fields._label_ === undefined
-      ) {
-        let {
-          fields: { _label_, ...fields },
-          ...objectTypeConfig
-        } = type.toConfig();
-        return new GraphQLObjectType({ fields, ...objectTypeConfig });
-      }
 
-      return type;
-    },
-  });
+  const schema = mapSchema(
+    keystone.createApolloServer({
+      schemaName: 'public',
+      dev: process.env.NODE_ENV === 'development',
+    }).schema,
+    {
+      'MapperKind.OBJECT_TYPE'(type) {
+        if (lists[type.name] !== undefined && lists[type.name].fields._label_ === undefined) {
+          let {
+            fields: { _label_, ...fields },
+            ...objectTypeConfig
+          } = type.toConfig();
+          return new GraphQLObjectType({ fields, ...objectTypeConfig });
+        }
 
-  // TODO: find a way to not do this
-  let graphQLSchema = config.extendGraphqlSchema?.(schema, keystone) || schema;
-  if (sessionStrategy?.end) {
-    graphQLSchema = mergeSchemas({
-      schemas: [graphQLSchema],
+        return type;
+      },
+    }
+  );
+
+  extensions = [
+    // Extend with session mutation
+    // FIXME: Move this code into the session module
+    sessionStrategy?.end && {
       typeDefs: gql`
         type Mutation {
           endSession: Boolean!
@@ -204,39 +233,25 @@ function createGraphQLSchema(
           },
         },
       },
-    });
-  }
-  graphQLSchema = adminMetaSchemaExtension({
-    adminMeta,
-    graphQLSchema,
-    isAccessAllowed:
-      sessionImplementation === undefined
-        ? undefined
-        : config.ui?.isAccessAllowed ?? (({ session }) => session !== undefined),
-    config,
-  });
-  return graphQLSchema;
+    },
+    // Extend with admin Meta
+    adminMetaSchemaExtension({
+      adminMeta,
+      isAccessAllowed:
+        sessionStrategy === undefined
+          ? undefined
+          : ui?.isAccessAllowed ?? (({ session }) => session !== undefined),
+      config,
+    }),
+  ].filter(x => x);
+
+  return (extensions as [{ typeDefs: string; resolvers: any }]).reduce(
+    (s, { typeDefs, resolvers }) => mergeSchemas({ schemas: [s], typeDefs, resolvers }),
+    extendGraphqlSchema?.(schema, keystone) || schema
+  );
 }
 
-export function createSystem(config: KeystoneConfig): KeystoneSystem {
-  config = applyIdFieldDefaults(config);
-
-  const keystone = createKeystone(config);
-
-  const sessionStrategy = config.session?.();
-
-  const { adminMeta, views } = createAdminMeta(config, keystone, sessionStrategy);
-
-  let sessionImplementation = sessionStrategy ? implementSession(sessionStrategy) : undefined;
-
-  const graphQLSchema = createGraphQLSchema(
-    config,
-    keystone,
-    adminMeta,
-    sessionStrategy,
-    sessionImplementation
-  );
-
+function createCreateContext(keystone: any, graphQLSchema: GraphQLSchema) {
   function createContext({
     sessionContext,
     skipAccessControl = false,
@@ -258,6 +273,7 @@ export function createSystem(config: KeystoneConfig): KeystoneSystem {
       );
     };
     const contextToReturn: any = {
+      // FIXME: We will probably want a mechanism to expose the `internal` schema
       schemaName: 'public',
       ...(skipAccessControl ? skipAccessControlContext : accessControlContext),
       lists: itemAPI,
@@ -281,69 +297,36 @@ export function createSystem(config: KeystoneConfig): KeystoneSystem {
       gqlNames: (listKey: string) => keystone.lists[listKey].gqlNames,
       maxTotalResults: (keystone as any).queryLimits.maxTotalResults,
       createContext,
-      ...sessionContext,
+      ...sessionContext, // { session, startSession, endSession }
     };
     return contextToReturn;
   }
   let itemAPI: Record<string, ReturnType<typeof itemAPIForList>> = {};
-  for (const listKey of Object.keys(adminMeta.lists)) {
-    itemAPI[listKey] = itemAPIForList(
-      (keystone as any).lists[listKey],
-      graphQLSchema,
-      createContext
-    );
+  for (const listKey of Object.keys(keystone.lists)) {
+    itemAPI[listKey] = itemAPIForList(keystone.lists[listKey], graphQLSchema, createContext);
   }
-
-  const createSessionContext = sessionImplementation?.createContext;
-  let keystoneThing = {
-    keystone,
-    adminMeta,
-    graphQLSchema,
-    views,
-    createSessionContext: createSessionContext
-      ? (req: IncomingMessage, res: ServerResponse) => createSessionContext(req, res, keystoneThing)
-      : undefined,
-    createContext,
-    async createContextFromRequest(req: IncomingMessage, res: ServerResponse) {
-      return createContext({
-        sessionContext: await sessionImplementation?.createContext(req, res, keystoneThing),
-      });
-    },
-    config,
-  };
-  return keystoneThing;
+  return createContext;
 }
 
-/* Validate lists config and default the id field */
-function applyIdFieldDefaults(config: KeystoneConfig): KeystoneConfig {
-  const lists: KeystoneConfig['lists'] = {};
-  Object.keys(config.lists).forEach(key => {
-    const listConfig = config.lists[key];
-    if (listConfig.fields.id) {
-      throw new Error(
-        `A field with the \`id\` path is defined in the fields object on the ${JSON.stringify(
-          key
-        )} list. This is not allowed, use the idField option instead.`
-      );
-    }
-    let idField =
-      config.lists[key].idField ??
-      { mongoose: mongoId({}), knex: autoIncrement({}) }[config.db.adapter];
-    idField = {
-      ...idField,
-      config: {
-        ui: {
-          createView: { fieldMode: 'hidden', ...idField.config.ui?.createView },
-          itemView: { fieldMode: 'hidden', ...idField.config.ui?.itemView },
-          ...idField.config.ui,
-        },
-        ...idField.config,
-      },
-    };
+export function createSystem(config: KeystoneConfig): KeystoneSystem {
+  config.lists = applyIdFieldDefaults(config);
 
-    const fields = { id: idField, ...listConfig.fields };
-    lists[key] = { ...listConfig, fields };
-  });
+  const keystone = createKeystone(config);
 
-  return { ...config, lists };
+  const sessionStrategy = config.session?.();
+
+  const { adminMeta, views } = createAdminMeta(config, keystone, sessionStrategy);
+
+  const graphQLSchema = createGraphQLSchema(config, keystone, sessionStrategy, adminMeta);
+
+  const createContext = createCreateContext(keystone, graphQLSchema);
+
+  return {
+    keystone,
+    sessionStrategy,
+    adminMeta,
+    views,
+    graphQLSchema,
+    createContext,
+  };
 }

@@ -9,7 +9,7 @@ import type {
 import type { ListHooks } from './schema/hooks';
 import { SessionStrategy } from './session';
 import { SchemaConfig } from './schema';
-import { IncomingMessage, ServerResponse } from 'http';
+import { IncomingMessage } from 'http';
 import { GraphQLSchema, ExecutionResult, DocumentNode } from 'graphql';
 import { BaseListMeta, SerializedAdminMeta } from './admin-meta';
 export * from './schema';
@@ -130,16 +130,12 @@ export type FieldDefaultValue<T> =
   | MaybePromise<(args: FieldDefaultValueArgs<T>) => T | null | undefined>;
 
 export type KeystoneSystem = {
-  keystone: any;
-  config: KeystoneConfig;
+  keystone: any; // FIXME: This should be the core keystone class type
+  sessionStrategy: any;
   adminMeta: SerializedAdminMeta;
+  views: string[];
   graphQLSchema: GraphQLSchema;
   createContext: (args: { sessionContext?: SessionContext; skipAccessControl?: boolean }) => any;
-  createContextFromRequest: (req: IncomingMessage, res: ServerResponse) => any;
-  createSessionContext:
-    | ((req: IncomingMessage, res: ServerResponse) => Promise<SessionContext>)
-    | undefined;
-  views: string[];
 };
 
 export type SessionContext = {

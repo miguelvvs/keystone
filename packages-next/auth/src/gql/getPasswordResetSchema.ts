@@ -1,9 +1,7 @@
 import { AuthGqlNames, AuthTokenTypeConfig } from '../types';
-
 import { updateAuthToken } from '../lib/updateAuthToken';
 import { redeemAuthToken } from '../lib/redeemAuthToken';
 import { validateAuthToken } from '../lib/validateAuthToken';
-import { updateItemSecret } from '../lib/updateItemSecret';
 import { getAuthTokenErrorMessage } from '../lib/getErrorMessage';
 
 export function getPasswordResetSchema({
@@ -64,7 +62,7 @@ export function getPasswordResetSchema({
         async [gqlNames.sendItemPasswordResetLink](root: any, args: any, ctx: any) {
           const list = ctx.keystone.lists[listKey];
           const identity = args[identityField];
-          const result = await updateAuthToken(
+          const { success, code, token, itemId } = await updateAuthToken(
             'passwordReset',
             listKey,
             identityField,
@@ -74,27 +72,25 @@ export function getPasswordResetSchema({
           );
 
           // Note: `success` can be false with no code
-          if (!result.success && result.code) {
-            const message = getAuthTokenErrorMessage({
-              identityField,
-              itemSingular: list.adminUILabels.singular,
-              itemPlural: list.adminUILabels.plural,
-              code: result.code,
-            });
-            return { code: result.code, message };
+          if (!success && code) {
+            return {
+              code,
+              message: getAuthTokenErrorMessage({
+                identityField,
+                itemSingular: list.adminUILabels.singular,
+                itemPlural: list.adminUILabels.plural,
+                code,
+              }),
+            };
           }
-          if (result.success) {
-            await passwordResetLink.sendToken({
-              itemId: result.itemId,
-              identity,
-              token: result.token,
-            });
+          if (success) {
+            await passwordResetLink.sendToken({ itemId, identity, token });
           }
           return {};
         },
         async [gqlNames.redeemItemPasswordResetToken](root: any, args: any, ctx: any) {
           const list = ctx.keystone.lists[listKey];
-          const result = await redeemAuthToken(
+          const { code, success, item } = await redeemAuthToken(
             'passwordReset',
             list,
             listKey,
@@ -105,25 +101,31 @@ export function getPasswordResetSchema({
             ctx
           );
 
-          if (!result.success) {
-            const message = getAuthTokenErrorMessage({
-              identityField,
-              itemSingular: list.adminUILabels.singular,
-              itemPlural: list.adminUILabels.plural,
-              code: result.code,
-            });
-            return { code: result.code, message };
+          if (!success) {
+            return {
+              code,
+              message: getAuthTokenErrorMessage({
+                identityField,
+                itemSingular: list.adminUILabels.singular,
+                itemPlural: list.adminUILabels.plural,
+                code,
+              }),
+            };
           }
 
-          const secretPlaintext = args[secretField];
-          await updateItemSecret(list, result.item.id, secretPlaintext, secretField, ctx);
+          // TODO: The underlying Password field will still hard error on validation failures; these should be surfaced better
+          await updateItem({
+            context: ctx,
+            listKey,
+            item: { id: item.id, data: { [secretField]: args[secretField] } },
+          });
           return null;
         },
       },
       Query: {
         async [gqlNames.validateItemPasswordResetToken](root: any, args: any, ctx: any) {
           const list = ctx.keystone.lists[listKey];
-          const result = await validateAuthToken(
+          const { code, success } = await validateAuthToken(
             'passwordReset',
             list,
             listKey,
@@ -131,17 +133,19 @@ export function getPasswordResetSchema({
             protectIdentities,
             passwordResetLink.tokensValidForMins,
             args,
-            ctx
+            ctx,
           );
 
-          if (!result.success && result.code) {
-            const message = getAuthTokenErrorMessage({
-              identityField,
-              itemSingular: list.adminUILabels.singular,
-              itemPlural: list.adminUILabels.plural,
-              code: result.code,
-            });
-            return { code: result.code, message };
+          if (!success && code) {
+            return {
+              code,
+              message: getAuthTokenErrorMessage({
+                identityField,
+                itemSingular: list.adminUILabels.singular,
+                itemPlural: list.adminUILabels.plural,
+                code,
+              }),
+            };
           }
           return null;
         },

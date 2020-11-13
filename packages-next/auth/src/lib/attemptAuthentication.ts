@@ -9,8 +9,8 @@ export async function attemptAuthentication(
   args: Record<string, string>,
   context: any
 ): Promise<
-  | { success: false; code: PasswordAuthErrorCode }
-  | { success: true; item: { id: any; [prop: string]: any } }
+  | { success: false; code: PasswordAuthErrorCode; item: undefined }
+  | { success: true; code: undefined; item: { id: any; [prop: string]: any } }
 > {
   const identity = args[identityField];
   const canidatePlaintext = args[secretField];

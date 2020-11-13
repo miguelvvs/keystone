@@ -15,7 +15,7 @@ export async function validateAuthToken(
   protectIdentities: boolean,
   tokenValidMins: number | undefined,
   args: Record<string, string>,
-  context: any
+  context: any,
 ): Promise<
   | { success: false; code: AuthTokenRedemptionErrorCode }
   | { success: true; item: { id: any; [prop: string]: any } }
