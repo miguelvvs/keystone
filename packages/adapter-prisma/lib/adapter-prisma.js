@@ -192,6 +192,9 @@ class PrismaAdapter extends BaseKeystoneAdapter {
   }
 
   async postConnect({ rels }) {
+    console.log('TRY TO MAKE EXCLUSIVE');
+    await this.prisma.$queryRaw('pragma locking_mode = EXCLUSIVE;');
+    console.log('WIN?');
     Object.values(this.listAdapters).forEach(listAdapter => {
       listAdapter._postConnect({ rels, prisma: this.prisma });
     });
