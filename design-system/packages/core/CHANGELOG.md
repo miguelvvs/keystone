@@ -1,5 +1,13 @@
 # @keystone-ui/core
 
+## 1.0.3
+
+### Patch Changes
+
+- [`f4a855c71`](https://github.com/keystonejs/keystone/commit/f4a855c71e966ef3ebc894a3b0f1af51e5182394) [#4388](https://github.com/keystonejs/keystone/pull/4388) Thanks [@jossmac](https://github.com/jossmac)! - add `xxsmall` spacing key/value
+
+* [`eddd7e795`](https://github.com/keystonejs/keystone/commit/eddd7e79599e20f5bef61f240d874b37d0a084c4) [#4376](https://github.com/keystonejs/keystone/pull/4376) Thanks [@jossmac](https://github.com/jossmac)! - tidy the document field; primarily the toolbar
+
 ## 1.0.2
 
 ### Patch Changes

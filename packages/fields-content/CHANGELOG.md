@@ -1,5 +1,11 @@
 # @keystonejs/fields-content
 
+## 9.0.3
+
+### Patch Changes
+
+- [`fa12a18b0`](https://github.com/keystonejs/keystone/commit/fa12a18b077367563b1b69db55274e47a1bd5027) [#4377](https://github.com/keystonejs/keystone/pull/4377) Thanks [@jossmac](https://github.com/jossmac)! - Update apply-ref dependency
+
 ## 9.0.2
 
 ### Patch Changes
