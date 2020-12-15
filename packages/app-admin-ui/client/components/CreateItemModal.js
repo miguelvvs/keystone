@@ -11,7 +11,9 @@ import {
   forwardRef,
 } from 'react';
 import { useHistory } from 'react-router-dom';
-import { useMutation } from '@apollo/client';
+//import { useMutation } from '@apollo/client';
+// As a workaround for  https://github.com/apollographql/apollo-client/issues/5708
+import { useMutation } from '../../client/apollo-wrapper';
 import { useToasts } from 'react-toast-notifications';
 
 import { Button, LoadingButton } from '@arch-ui/button';

@@ -1,7 +1,9 @@
 /** @jsx jsx */
 import { jsx } from '@emotion/core';
 import { Fragment, Suspense, useMemo, useCallback, useState, useRef, useEffect } from 'react';
-import { useMutation, useQuery } from '@apollo/client';
+import { useQuery } from '@apollo/client';
+// As a workaround for  https://github.com/apollographql/apollo-client/issues/5708
+import { useMutation } from '../../apollo-wrapper';
 import { useHistory, useParams } from 'react-router-dom';
 import { useToasts } from 'react-toast-notifications';
 import memoizeOne from 'memoize-one';
@@ -206,14 +208,6 @@ const ItemDetails = ({ list, item: initialData, itemErrors, onUpdate }) => {
     const mutationResult = await updateItem({ variables: { id: item.id, data } });
     if (!mutationResult) {
       return;
-    }
-
-    // Workaround for apollo error https://github.com/apollographql/apollo-client/issues/5708
-    if (mutationResult.errors && mutationResult.errors.length > 0) {
-      return handleCreateUpdateMutationError({
-        error: { graphQLErrors: mutationResult.errors },
-        addToast,
-      });
     }
 
     setValidationErrors({});

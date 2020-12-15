@@ -1,7 +1,9 @@
 /** @jsx jsx */
 import { jsx } from '@emotion/core';
 import { Fragment, useMemo, useCallback, Suspense, useState } from 'react';
-import { useMutation } from '@apollo/client';
+// import { useMutation } from '@apollo/client';
+// As a workaround for  https://github.com/apollographql/apollo-client/issues/5708
+import { useMutation } from '../../client/apollo-wrapper';
 import { useToasts } from 'react-toast-notifications';
 import { omit, arrayToObject, countArrays } from '@keystonejs/utils';
 
